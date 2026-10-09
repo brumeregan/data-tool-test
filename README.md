@@ -13,7 +13,7 @@ A small full-stack scaffold: a React frontend and an Express backend, both TypeS
 docker compose up --build
 ```
 
-Open http://localhost:5173. The page calls `/api/health` and shows the backend's response.
+Open http://localhost:5173. The page provides a simple interface to query the backend for SEC filings data.
 
 Source in `backend/src` and `frontend/src` is mounted into the containers, so edits hot-reload.
 
