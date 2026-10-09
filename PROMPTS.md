@@ -321,3 +321,108 @@ Mock the EDGAR client module — no live network calls in tests.
    Open one returned documentUrl in a browser and confirm it actually loads on
    sec.gov.
 3. No any types. No EDGAR or array logic inside the route handler.
+
+## Prompt 5 — GET /filings/summary
+
+Implement GET /filings/summary with Sonnet 5 agent.   Do not modify any other existed routes
+
+## What it does
+Given a set of companies, return for each: the number of filings per form type
+over the last 12 months, and the date of its latest 10-K.
+
+## Layering
+backend/src/services/summary.ts holds the aggregation.
+backend/src/routes/summary.ts holds the Express router.
+Reuse the existing service/client/normalizer — no new EDGAR fetching code.
+
+## Request contract
+GET /filings/summary?tickers=AAPL,SPOT,JPM
+
+- tickers: required, comma-separated, 1..10 entries. Validate with zod in
+  backend/src/schemas.ts. Trim, uppercase, deduplicate. Empty or >10 is a 400.
+
+## Response contract
+200:
+{
+  "companies": [
+    {
+      "ticker": "AAPL",
+      "cik": "0000320193",
+      "name": "Apple Inc.",
+      "countsByForm": { "8-K": 11, "10-Q": 3, "10-K": 1, "4": 47 },
+      "totalLast12Months": 62,
+      "latest10K": { "filingDate": "2024-11-01", "documentUrl": "https://..." }
+    },
+    {
+      "ticker": "SPOT",
+      "cik": "0001639920",
+      "name": "Spotify Technology S.A.",
+      "countsByForm": { "6-K": 8, "20-F": 1 },
+      "totalLast12Months": 9,
+      "latest10K": null,
+      "note": "Foreign private issuer — files 20-F instead of 10-K"
+    }
+  ],
+  "errors": [
+    { "ticker": "NOTREAL", "code": "TICKER_NOT_FOUND", "message": "..." }
+  ]
+}
+
+Critical details:
+- SPOTIFY HAS NO 10-K. It's a foreign private issuer and files 20-F. latest10K
+  must be null, not an error, not a crash. Surface the equivalent annual form
+  in a way the UI can use — either the "note" field above or a separate
+  latestAnnualReport field carrying the 20-F. Pick one, and comment the choice.
+- latest10K searches the FULL filing history, not just the last 12 months —
+  a company's most recent 10-K may be 13 months old.
+- The 12-month window applies only to countsByForm and totalLast12Months.
+  Define the window as "filingDate >= today minus 12 months", compute the
+  cutoff once per request, and comment the boundary choice (inclusive).
+- countsByForm counts EVERY form type present in the window, not a fixed list.
+- ONE FAILING COMPANY MUST NOT FAIL THE WHOLE RESPONSE. Use
+  Promise.allSettled, put successes in companies[] and failures in errors[],
+  and still return 200 as long as at least one succeeded. If every ticker
+  fails, return the appropriate error status instead.
+
+## Performance
+- Fetch companies in parallel, but rely on the existing throttle in the client
+  so we stay under the SEC's 10 req/s ceiling.
+- The per-CIK submissions cache from M1 must be doing its work here: calling
+  this endpoint twice in a row with the same tickers should produce no second
+  round of network requests. Verify this.
+
+## Wiring
+Mount the router in src/index.ts. Keep /health and the M3 route working.
+
+## Tests (Vitest + supertest)
+Location: backend/src/routes/__tests__/summary.test.ts
+Mock the EDGAR client — no live network in tests. Build fixtures with dates
+relative to a frozen clock (vi.useFakeTimers) so the 12-month window stays
+deterministic.
+
+- multiple tickers return in one response
+- countsByForm excludes a filing dated 13 months ago and includes one dated
+  11 months ago
+- latest10K picks the most recent 10-K even when it falls outside the 12-month
+  window
+- latest10K is null for a company whose history contains no 10-K, and the
+  response still succeeds
+- a "10-K/A" amendment is not mistaken for a 10-K
+- one unknown ticker among valid ones lands in errors[] while the rest succeed,
+  status still 200
+- all tickers failing returns a non-200
+- duplicate tickers in the query are deduplicated
+- more than 10 tickers is a 400
+- missing tickers param is a 400
+
+## Acceptance criteria
+1. npm test passes in backend/, all earlier tests unchanged and still green
+2. Against the live API, run and show me the output of:
+   /filings/summary?tickers=AAPL,SPOT,JPM
+   Confirm Spotify returns latest10K: null without an error, and that Apple's
+   latest10K date matches what's on sec.gov.
+3. Call it twice and confirm the second call hits the cache rather than the
+   network — log or otherwise demonstrate this.
+4. No any types.
+
+Then stop. Don't start the frontend.
