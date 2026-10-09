@@ -527,3 +527,102 @@ Mock the api module — no real network calls.
 3. No any types. No hardcoded backend URL.
 
 Then stop. Don't build the summary view.
+
+## Prompt 7 — Summary view
+
+Build the summary view. Do not modify anything in backend/,
+and do not change the filings list beyond adding navigation between the two
+views.
+
+## Design decision, made deliberately
+The assignment says to display the summary "in whatever form you find most
+useful". We're choosing a matrix table: one row per company, one column per
+form type, counts in the cells, plus a latest-10-K column. Rationale: the
+point of the endpoint is cross-company comparison over a common set of form
+types, and a matrix makes a missing form type visible as a gap in a column
+rather than as an absence you have to notice. Put this rationale in a short
+comment at the top of the component — I'll be asked to justify it.
+
+No charts. Counts across a handful of companies are read, not eyeballed.
+
+## Types
+Extend frontend/src/types.ts to mirror the backend summary contract exactly:
+the companies[] entries with countsByForm, totalLast12Months, latest10K
+(nullable), the optional note field, and the errors[] array.
+
+## Structure
+src/
+├── api.ts                      # extend: add getSummary(tickers)
+├── hooks/
+│   └── useSummary.ts
+└── components/
+    ├── SummaryPage.tsx         # owns ticker set + fetch state
+    ├── TickerInput.tsx         # manage the set of companies to compare
+    └── SummaryTable.tsx        # the matrix
+
+Add simple navigation between the filings list and the summary — two tabs or
+two buttons at the top level. No router library; a single piece of view state
+in App.tsx is enough.
+
+## Behaviour
+
+TickerInput:
+- Manage a SET of tickers, not one. Add via input + button, remove via an × on
+  each chip.
+- Default the set to AAPL, SPOT, JPM on first load and fetch immediately, so
+  the view is never empty on arrival.
+- Uppercase, trim, reject duplicates client-side.
+- Enforce the backend's cap of 10 and disable Add at the limit.
+
+SummaryTable:
+- Rows: companies. Columns: the union of every form type across all returned
+  companies, so the matrix is rectangular.
+- Column ordering: put the meaningful annual/quarterly/current forms first
+  (10-K, 10-Q, 8-K, 20-F, 6-K), then everything else alphabetically. Companies
+  file a lot of Form 4s and similar noise; don't let that lead.
+- A company with no filings of a given form shows 0 or "—", visibly distinct
+  from a real count. Pick one and be consistent.
+- Include the totalLast12Months column and a latest 10-K column.
+
+## The Spotify case — handle this explicitly
+latest10K is null for foreign private issuers. The cell must NOT render as
+blank, "null", or an error. Render something that explains itself, e.g.
+"—" with the backend's note shown as a tooltip or a small caption beneath,
+making clear the company files 20-F instead. A reviewer will look straight at
+this cell.
+
+## The errors[] array — do not ignore it
+The endpoint returns 200 with a partial result when some tickers fail. Render
+those failures as a small notice above or below the table ("NOTREAL: no
+company found"), with the successful rows still shown. Silently dropping them
+is the failure mode to avoid here.
+
+## Required states
+- loading: indicator, controls stay visible and disabled
+- error: only when the whole request fails; show the backend message
+- partial: table plus the per-ticker error notices — this is the interesting one
+- empty ticker set: prompt to add a company, not an error
+
+Reuse whatever loading/error presentation you built in M5 rather than
+inventing a second style.
+
+## Tests (Vitest + @testing-library/react)
+Location: frontend/src/components/__tests__/
+Mock the api module.
+- matrix renders one row per company and a column per distinct form type
+- a company missing a form type renders the zero/dash cell, not a blank
+- null latest10K renders the explanatory cell, not "null"
+- entries in errors[] render as notices while successful rows still display
+- removing a ticker refetches with the reduced set
+- adding a duplicate ticker is rejected without a request
+
+## Acceptance criteria
+1. npm test passes in frontend/, all M5 tests unchanged and still green
+2. With docker compose up, in the browser:
+   - the summary loads AAPL, SPOT, JPM by default
+   - Spotify's latest-10-K cell explains itself rather than showing null
+   - adding a bogus ticker shows a notice while the other rows survive
+   - removing a ticker refetches correctly
+   - both views are reachable via the navigation and each still works
+   Confirm all of these yourself before reporting done.
+3. No any types. No hardcoded backend URL.
