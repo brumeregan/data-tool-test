@@ -1,6 +1,7 @@
 import express from "express";
 import { errorHandler } from "./middleware/errorHandler";
 import { filingsRouter } from "./routes/filings";
+import { summaryRouter } from "./routes/summary";
 
 export const createApp = () => {
   const app = express();
@@ -10,6 +11,7 @@ export const createApp = () => {
   });
 
   app.use("/companies", filingsRouter);
+  app.use("/filings", summaryRouter);
   app.use(errorHandler);
 
   return app;

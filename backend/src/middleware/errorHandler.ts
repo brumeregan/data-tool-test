@@ -1,8 +1,9 @@
 import type { ErrorRequestHandler } from "express";
 import { ZodError } from "zod";
-import { EdgarUnavailable, TickerNotFound } from "../errors";
+import { AllTickersFailed, EdgarUnavailable, TickerNotFound } from "../errors";
+import type { TickerError } from "../errors";
 
-type ErrorBody = { error: { code: string; message: string } };
+type ErrorBody = { error: { code: string; message: string }; errors?: TickerError[] };
 
 const describe = (error: unknown): { status: number; body: ErrorBody } => {
   if (error instanceof ZodError) {
@@ -10,6 +11,10 @@ const describe = (error: unknown): { status: number; body: ErrorBody } => {
       .map((issue) => `${issue.path.join(".") || "query"}: ${issue.message}`)
       .join("; ");
     return { status: 400, body: { error: { code: "INVALID_QUERY", message } } };
+  }
+  if (error instanceof AllTickersFailed) {
+    const { code, errors } = error;
+    return { status: error.status, body: { error: { code, message: error.message }, errors } };
   }
   if (error instanceof TickerNotFound) {
     return { status: 404, body: { error: { code: "TICKER_NOT_FOUND", message: error.message } } };
