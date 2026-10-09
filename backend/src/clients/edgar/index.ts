@@ -1,5 +1,5 @@
 export { resolveTicker, resetTickerCache } from "./tickers";
-export { getSubmissions } from "./submissions";
+export { getSubmissions, getFullSubmissions, getArchiveChunk, listArchiveFiles } from "./submissions";
 export type {
   TickerEntry,
   CompanyTickers,

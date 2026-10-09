@@ -7,11 +7,11 @@ import { EdgarUnavailable, TickerNotFound } from "../../errors";
 
 vi.mock("../../clients/edgar", () => ({
   resolveTicker: vi.fn(),
-  getSubmissions: vi.fn(),
+  getFullSubmissions: vi.fn(),
 }));
 
 import { createApp } from "../../app";
-import { getSubmissions, resolveTicker } from "../../clients/edgar";
+import { getFullSubmissions, resolveTicker } from "../../clients/edgar";
 
 // Real trimmed Apple submissions: 10 filings (4 x2, 144, 10-Q, 8-K x5, 10-K), newest first.
 const apple = JSON.parse(
@@ -22,12 +22,12 @@ const app = createApp();
 
 beforeEach(() => {
   vi.mocked(resolveTicker).mockReset();
-  vi.mocked(getSubmissions).mockReset();
+  vi.mocked(getFullSubmissions).mockReset();
   vi.mocked(resolveTicker).mockImplementation(async (ticker: string) => {
     if (ticker.trim().toUpperCase() !== "AAPL") throw new TickerNotFound(ticker);
     return { cik: "0000320193", title: "Apple Inc." };
   });
-  vi.mocked(getSubmissions).mockResolvedValue(apple);
+  vi.mocked(getFullSubmissions).mockResolvedValue(apple);
 });
 
 describe("GET /companies/:ticker/filings", () => {
@@ -129,7 +129,7 @@ describe("GET /companies/:ticker/filings", () => {
   });
 
   it("returns 502 EDGAR_UNAVAILABLE when the client fails", async () => {
-    vi.mocked(getSubmissions).mockRejectedValue(new EdgarUnavailable("EDGAR responded with HTTP 503"));
+    vi.mocked(getFullSubmissions).mockRejectedValue(new EdgarUnavailable("EDGAR responded with HTTP 503"));
     const res = await request(app).get("/companies/AAPL/filings");
     expect(res.status).toBe(502);
     expect(res.body).toEqual({

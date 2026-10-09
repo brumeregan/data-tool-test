@@ -3,13 +3,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Submissions } from "../../clients/edgar";
 import { EdgarUnavailable, TickerNotFound } from "../../errors";
 
-vi.mock("../../clients/edgar", () => ({
+// Network-facing functions are mocked; listArchiveFiles is pure, so the real one is kept.
+vi.mock("../../clients/edgar", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../clients/edgar")>()),
   resolveTicker: vi.fn(),
   getSubmissions: vi.fn(),
+  getArchiveChunk: vi.fn(),
 }));
 
 import { createApp } from "../../app";
-import { getSubmissions, resolveTicker } from "../../clients/edgar";
+import { getArchiveChunk, getSubmissions, resolveTicker } from "../../clients/edgar";
 
 // Frozen clock: cutoff = 2025-10-09 (12 calendar months earlier, inclusive).
 const NOW = "2026-10-09T12:00:00Z";
@@ -72,6 +75,7 @@ beforeEach(() => {
   vi.setSystemTime(new Date(NOW));
   vi.mocked(resolveTicker).mockReset();
   vi.mocked(getSubmissions).mockReset();
+  vi.mocked(getArchiveChunk).mockReset();
   vi.mocked(resolveTicker).mockImplementation(async (ticker: string) => {
     const company = COMPANIES[ticker];
     if (!company) throw new TickerNotFound(ticker);
@@ -266,5 +270,80 @@ describe("GET /filings/summary", () => {
     expect(res.body.error.code).toBe("INVALID_QUERY");
     expect(res.body.error.message).toContain("tickers");
     expect(resolveTicker).not.toHaveBeenCalled();
+  });
+});
+
+describe("latest 10-K from archive files", () => {
+  const FILE_NEW = { name: "CIK0000320193-submissions-002.json", filingCount: 1, filingFrom: "2020-01-01", filingTo: "2023-12-31" };
+  const FILE_OLD = { name: "CIK0000320193-submissions-001.json", filingCount: 1, filingFrom: "2010-01-01", filingTo: "2019-12-31" };
+
+  // Recent block holds only an 8-K; the archive files are listed oldest-first on purpose.
+  const mockApple = (chunks: Record<string, Row[]>) => {
+    vi.mocked(getSubmissions).mockImplementation(async (cik: string) => {
+      if (cik !== "0000320193") {
+        const other = Object.values(COMPANIES).find((c) => c.cik === cik);
+        if (!other) throw new Error(`unexpected cik ${cik}`);
+        return makeSubmissions(other);
+      }
+      const base = makeSubmissions({ cik: "0000320193", name: "Apple Inc.", rows: [{ form: "8-K", filingDate: ELEVEN_MONTHS_AGO }] });
+      return { ...base, filings: { ...base.filings, files: [FILE_OLD, FILE_NEW] } };
+    });
+    vi.mocked(getArchiveChunk).mockImplementation(async ({ submissions, file }) => {
+      const rows = chunks[file.name];
+      if (!rows) throw new EdgarUnavailable(`archive ${file.name} unavailable`);
+      return makeSubmissions({ cik: submissions.cik, name: submissions.name, rows });
+    });
+  };
+  const fetchedFiles = () => vi.mocked(getArchiveChunk).mock.calls.map(([{ file }]) => file.name);
+
+  it("finds a 10-K that exists only in an archive file", async () => {
+    mockApple({
+      [FILE_NEW.name]: [{ form: "8-K", filingDate: "2022-05-01" }],
+      [FILE_OLD.name]: [{ form: "10-K", filingDate: "2018-11-05" }, { form: "10-K", filingDate: "2017-11-03" }],
+    });
+    const res = await summarize("tickers=AAPL");
+    expect(res.status).toBe(200);
+    expect(only(res.body, "AAPL").latest10K).toMatchObject({ filingDate: "2018-11-05" });
+    // Newest archive is searched first even though it is listed second.
+    expect(fetchedFiles()).toEqual([FILE_NEW.name, FILE_OLD.name]);
+    // The 12-month counts still come from the recent block only.
+    expect(only(res.body, "AAPL").totalLast12Months).toBe(1);
+  });
+
+  it("stops at the first archive that contains a 10-K", async () => {
+    mockApple({
+      [FILE_NEW.name]: [{ form: "10-K", filingDate: "2022-10-28" }],
+      [FILE_OLD.name]: [{ form: "10-K", filingDate: "2018-11-05" }],
+    });
+    const res = await summarize("tickers=AAPL");
+    expect(only(res.body, "AAPL").latest10K).toMatchObject({ filingDate: "2022-10-28" });
+    expect(fetchedFiles()).toEqual([FILE_NEW.name]);
+  });
+
+  it("fetches no archive when the recent block already has a 10-K", async () => {
+    const res = await summarize("tickers=AAPL"); // default fixture: 10-Ks in recent, files: []
+    expect(only(res.body, "AAPL").latest10K).not.toBeNull();
+    expect(getArchiveChunk).not.toHaveBeenCalled();
+  });
+
+  it("returns null after scanning every archive when there is no 10-K anywhere", async () => {
+    mockApple({
+      [FILE_NEW.name]: [{ form: "8-K", filingDate: "2022-05-01" }],
+      [FILE_OLD.name]: [{ form: "10-K/A", filingDate: "2018-11-05" }],
+    });
+    const res = await summarize("tickers=AAPL");
+    expect(res.status).toBe(200);
+    expect(only(res.body, "AAPL").latest10K).toBeNull();
+    expect(fetchedFiles()).toEqual([FILE_NEW.name, FILE_OLD.name]);
+  });
+
+  it("reports a failing archive as that company's error while others succeed", async () => {
+    mockApple({ [FILE_OLD.name]: [{ form: "10-K", filingDate: "2018-11-05" }] }); // NEW archive missing -> fails
+    const res = await summarize("tickers=AAPL,SPOT");
+    expect(res.status).toBe(200);
+    expect(res.body.errors).toEqual([
+      expect.objectContaining({ ticker: "AAPL", code: "EDGAR_UNAVAILABLE" }),
+    ]);
+    expect(res.body.companies.map((c: CompanyBody) => c.ticker)).toEqual(["SPOT"]);
   });
 });
