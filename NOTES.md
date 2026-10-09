@@ -4,4 +4,4 @@ Possible issues and improvements:
 2. frontend does not support routing for certain pages, which can lead to a poor user experience.
 3. Infra currently supports only development env. Production set up should be implemented.
 4. Current test setup doesnt include logs.
-
+5. The throttle is one global queue, so a big request blocks everyone.
