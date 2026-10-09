@@ -226,3 +226,98 @@ Cover:
 4. Every function in the module is exported and directly tested
 
 Then stop. Don't wire it into a route yet.
+
+## Prompt 4 — GET /companies/:ticker/filings (M3)
+
+Implement GET /companies/:ticker/filings. This is step M3 — wiring the existing
+EDGAR client (M1) and normalizer (M2) into a real route. Do NOT implement
+/filings/summary or any UI; those come next and I want them separate.
+
+Do NOT modify normalize.ts, paginate(), or their tests. The existing
+paginate(filings, page, limit) -> { items, total, page, limit, totalPages }
+signature stays as it is; build on top of it.
+
+## Layering
+Add a thin service layer between the route and everything below it:
+
+backend/src/services/filings.ts
+  getFilings({ ticker, form, page, limit, sort })
+    -> resolveTicker -> fetch submissions -> normalize -> filter -> sort
+       -> paginate
+
+The route handler stays thin: validate input, call the service, send the
+response. No EDGAR knowledge, no array manipulation in the route.
+
+backend/src/routes/filings.ts holds the Express router.
+
+## Request contract
+GET /companies/:ticker/filings
+
+Query params, validated with zod in backend/src/schemas.ts:
+- form    optional string, e.g. "10-K". Uppercased and trimmed before use.
+- page    optional integer >= 1, default 1. Use z.coerce.number() — query
+          params arrive as strings.
+- limit   optional integer 1..100, default 25
+- sort    optional "asc" | "desc", default "desc" (newest first)
+
+Invalid params return 400 with a message naming the bad field.
+
+## Response contract
+200:
+{
+  "company": { "ticker": "AAPL", "cik": "0000320193", "name": "Apple Inc." },
+  "items": [ /* Filing objects from the normalizer */ ],
+  "total": 412,
+  "page": 1,
+  "limit": 25,
+  "totalPages": 17
+}
+
+- total is the count after the form filter is applied, not the company's total
+  filing count. The frontend needs it to know whether more pages exist.
+- items is always an array, never null.
+- A ticker with no filings matching the filter returns 200 with items: [] and
+  total: 0 — not a 404. Only an unresolvable ticker is a 404.
+
+Also return the set of distinct form types present for this company, so the
+frontend can populate its filter dropdown without a second request. Add it as
+a sibling field, e.g. "availableForms": ["10-K", "10-Q", "8-K", ...], sorted.
+Compute it from the full normalized list BEFORE filtering.
+
+## Errors
+Use the existing error-handling middleware. Do not try/catch in the route.
+- TickerNotFound   -> 404, { error: { code: "TICKER_NOT_FOUND", message } }
+- EdgarUnavailable -> 502, { error: { code: "EDGAR_UNAVAILABLE", message } }
+- zod validation failure -> 400, { error: { code: "INVALID_QUERY", message } }
+One consistent error envelope across all of them.
+
+## Wiring
+Mount the router in src/index.ts. Keep /health working.
+
+## Tests (Vitest + supertest)
+Location: backend/src/routes/__tests__/filings.test.ts
+Mock the EDGAR client module — no live network calls in tests.
+
+- 200 with the correct envelope shape for a known ticker
+- form filter narrows results and total reflects the filtered count
+- sort=asc and sort=desc both return correctly ordered items
+- page and limit slice correctly; a page past the end gives items: [] with the
+  full total and correct totalPages still reported
+- defaults apply when params are omitted (page 1, limit 25, sort desc)
+- limit above 100 is a 400
+- page 0 or negative is a 400
+- unknown ticker gives 404 with the right error code
+- EdgarUnavailable from the client surfaces as 502
+- availableForms is computed before filtering, so it's identical whether or not
+  a form filter is applied
+
+## Acceptance criteria
+1. npm test passes in backend/, including the pre-existing M2 tests, unchanged
+2. Against the live API, verify by hand and show me the output:
+   - /companies/AAPL/filings?form=10-K&limit=5
+   - /companies/JPM/filings?limit=10&page=2
+   - /companies/SPOT/filings?limit=5   (foreign issuer, files 20-F not 10-K)
+   - /companies/NOTAREALTICKER/filings  (expect 404)
+   Open one returned documentUrl in a browser and confirm it actually loads on
+   sec.gov.
+3. No any types. No EDGAR or array logic inside the route handler.
