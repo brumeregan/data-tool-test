@@ -1,0 +1,108 @@
+:root {
+  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  color: #1a1d21;
+  background: #f6f7f9;
+}
+
+body {
+  margin: 0;
+}
+
+.filings-page {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 24px 16px 48px;
+}
+
+h1 {
+  font-size: 1.5rem;
+  margin: 0 0 16px;
+}
+
+h2 {
+  font-size: 1.1rem;
+  margin: 20px 0 8px;
+}
+
+.muted {
+  color: #6b7280;
+  font-weight: normal;
+}
+
+.error {
+  color: #b42318;
+  background: #fef3f2;
+  border: 1px solid #fecdca;
+  border-radius: 6px;
+  padding: 10px 12px;
+}
+
+button,
+select,
+input {
+  font: inherit;
+  padding: 6px 10px;
+  border: 1px solid #c7ccd4;
+  border-radius: 6px;
+  background: #fff;
+}
+
+button {
+  cursor: pointer;
+}
+
+button:disabled,
+select:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.company-selector form,
+.quick-picks,
+.filings-controls,
+.pagination {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.quick-picks {
+  margin-top: 8px;
+}
+
+.filings-controls {
+  margin: 12px 0;
+}
+
+.results {
+  min-height: 120px;
+}
+
+.dimmed {
+  opacity: 0.5;
+}
+
+.filings-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: #fff;
+  border: 1px solid #e3e6ea;
+}
+
+.filings-table th,
+.filings-table td {
+  text-align: left;
+  padding: 8px 12px;
+  border-bottom: 1px solid #eceef1;
+  font-size: 0.9rem;
+}
+
+.filings-table th {
+  background: #f0f2f5;
+}
+
+.pagination {
+  margin-top: 16px;
+  justify-content: space-between;
+}
