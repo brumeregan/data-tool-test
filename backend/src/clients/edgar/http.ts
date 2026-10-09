@@ -10,7 +10,7 @@ const sleep = (ms: number): Promise<void> =>
 let chain: Promise<void> = Promise.resolve();
 let lastRequestAt = 0;
 
-// Throttle requests to EDGAR to avoid being blocked, usefull for large requests or several requests in a row (summary page)
+// Throttle requests to EDGAR to avoid being blocked, useful for large requests or several requests in a row (summary page)
 const throttle = (): Promise<void> => {
   const next = chain.then(async () => {
     const wait = lastRequestAt + MIN_GAP_MS - Date.now();
@@ -21,9 +21,13 @@ const throttle = (): Promise<void> => {
   return next;
 };
 
-const isRetryable = (status: number): boolean => status === 429 || status >= 500;
+const isRetriable = (status: number): boolean =>
+  status === 429 || status >= 500;
 
-const send = async (url: string, userAgent: string): Promise<Response> => {
+const fetchHandler = async (
+  url: string,
+  userAgent: string,
+): Promise<Response> => {
   await throttle();
   try {
     return await fetch(url, {
@@ -32,24 +36,30 @@ const send = async (url: string, userAgent: string): Promise<Response> => {
     });
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error);
-    throw new EdgarUnavailable(`EDGAR request failed (network or timeout): ${reason}`);
+    throw new EdgarUnavailable(
+      `EDGAR request failed (network or timeout): ${reason}`,
+    );
   }
 };
 
 export const getJson = async (url: string): Promise<unknown> => {
   const userAgent = process.env.SEC_USER_AGENT;
   if (!userAgent) {
-    throw new EdgarUnavailable("SEC_USER_AGENT is not set; EDGAR rejects anonymous clients");
+    throw new EdgarUnavailable(
+      "SEC_USER_AGENT is not set; EDGAR rejects anonymous clients",
+    );
   }
 
-  let response = await send(url, userAgent);
-  if (isRetryable(response.status)) {
+  let response = await fetchHandler(url, userAgent);
+  if (isRetriable(response.status)) {
     await sleep(RETRY_BACKOFF_MS);
-    response = await send(url, userAgent);
+    response = await fetchHandler(url, userAgent);
   }
 
   if (!response.ok) {
-    throw new EdgarUnavailable(`EDGAR responded with HTTP ${response.status} for ${url}`);
+    throw new EdgarUnavailable(
+      `EDGAR responded with HTTP ${response.status} for ${url}`,
+    );
   }
 
   try {

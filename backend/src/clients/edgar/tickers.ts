@@ -13,7 +13,8 @@ export const cikForSubmissionsUrl = (cik: number | string): string =>
   String(cik).padStart(10, "0");
 
 const loadTickers = async (): Promise<TickerMap> => {
-  const parsed = companyTickersSchema.safeParse(await getJson(TICKERS_URL));
+  const data = await getJson(TICKERS_URL);
+  const parsed = companyTickersSchema.safeParse(data);
   if (!parsed.success) {
     throw new EdgarUnavailable(
       `EDGAR company_tickers.json failed validation (shape changed): ${parsed.error.message}`,
@@ -42,8 +43,11 @@ const getTickers = (): Promise<TickerMap> => {
   return loading;
 };
 
-export const resolveTicker = async (ticker: string): Promise<ResolvedTicker> => {
-  const found = (await getTickers()).get(ticker.trim().toUpperCase());
+export const resolveTicker = async (
+  ticker: string,
+): Promise<ResolvedTicker> => {
+  const tickersMap = await getTickers();
+  const found = tickersMap.get(ticker.trim().toUpperCase());
   if (!found) throw new TickerNotFound(ticker);
   return found;
 };
