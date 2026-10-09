@@ -5,7 +5,7 @@
 Data-tool for EDGARs API
 
 Lets scaffold an application that contains frontend and backend parts. all parts should be deployed as containerized services.
-for frontend use ReactJs with named export functions.
+for frontend use ReactJs
 for backend - express with REST API, transpile to CommonJS
 Both backend and frontend uses typescript
 Requirements:
@@ -21,8 +21,7 @@ Frontend:
 - Vite dev server must bind host 0.0.0.0 or the container is unreachable
 - Vite proxy: /api -> http://backend:3000, rewriting away the /api prefix, so
   the browser makes same-origin requests and we need no CORS config
-- src/api.ts exports a small typed helper that fetches relative to /api and
-  throws on non-2xx
+- src/api.ts handle all fetches to the backend, returning parsed JSON or throwing an ApiError with the status code and message
 - App.tsx: nothing but a component that calls /api/health and renders the
   result, as an end-to-end proof the proxy works
 - One trivial Vitest test so the harness is proven
@@ -30,7 +29,7 @@ Frontend:
 Docker:
 - Dev-focused images, node:22-alpine, no multi-stage build
 - compose mounts ./backend/src and ./frontend/src as volumes for hot reload
-- Backend on 3000, frontend on 5173, frontend depends_on backend
+- Backend on 3000, frontend on 5173, frontend depends on backend
 - SEC_USER_AGENT set in compose as an env var with a placeholder value
 
 Docs:
@@ -53,22 +52,18 @@ backend/src/clients/edgar
 subflders:
 http.ts - only place where fetch is called
 tickerts.ts - ticker to CIK resolution
-submissions.ts   -CIK to raw submissions document
+submissions.ts   - CIK to raw submissions document
 schemas.ts   -  zod schemas for EDGAR response shapes
 types.ts   for types inferred from those schemas
- index.ts    for re-export the public API only
+index.ts    for re-export the public API only
 
- http.ts
+http.ts
 - Sends a User-Agent header on every request, read from process.env.SEC_USER_AGENT.
   The SEC requires a declared User-Agent with contact info; anonymous clients
   get 403s.
 - Exposes getJson(url: string): Promise<unknown> returning parsed JSON. It
   must NOT know about zod or about specific EDGAR shapes — callers validate.
-- Maps failures to the typed errors in src/errors.ts:
-  - 403 or 429 -> EdgarUnavailable, status included in the message
-  - 5xx -> EdgarUnavailable
-  - network error or timeout -> EdgarUnavailable
-  - 10s request timeout via AbortSignal.timeout
+- Maps failures to the typed errors in src/errors.ts to EdgarUnavailable
 - Throttle: the SEC's ceiling is 10 req/s. Enforce a minimum ~120ms gap between
   outbound requests with a simple promise chain or small queue. No external
   rate-limit library.
@@ -95,8 +90,7 @@ submissions.ts
 - Validate with a zod schema from ./schemas covering at minimum: cik, name, and
   filings.recent with its parallel arrays (accessionNumber, filingDate,
   reportDate, form, primaryDocument), plus filings.files.
-- Return the validated object, typed. Do NOT transform or flatten it — that's
-  the normalizer's job in M2.
+- Return the validated object, typed
 - A zod parse failure means EDGAR changed shape: throw EdgarUnavailable with a
   message making clear it's a validation failure, not a network one.
 - Cache per CIK in memory with a 15 min TTL so the summary endpoint hitting
@@ -227,10 +221,9 @@ Cover:
 
 Then stop. Don't wire it into a route yet.
 
-## Prompt 4 — GET /companies/:ticker/filings (M3)
+## Prompt 4 — GET /companies/:ticker/filings
 
-Implement GET /companies/:ticker/filings. This is step M3 — wiring the existing
-EDGAR client (M1) and normalizer (M2) into a real route. Do NOT implement
+Implement GET /companies/:ticker/filings. Create EDGAR client  and normalizer into a real route. Do NOT implement
 /filings/summary or any UI; those come next and I want them separate.
 
 Do NOT modify normalize.ts, paginate(), or their tests. The existing
@@ -312,7 +305,7 @@ Mock the EDGAR client module — no live network calls in tests.
   a form filter is applied
 
 ## Acceptance criteria
-1. npm test passes in backend/, including the pre-existing M2 tests, unchanged
+1. npm test passes in backend/, including the pre-existing tests, unchanged
 2. Against the live API, verify by hand and show me the output:
    - /companies/AAPL/filings?form=10-K&limit=5
    - /companies/JPM/filings?limit=10&page=2
@@ -387,12 +380,12 @@ Critical details:
 ## Performance
 - Fetch companies in parallel, but rely on the existing throttle in the client
   so we stay under the SEC's 10 req/s ceiling.
-- The per-CIK submissions cache from M1 must be doing its work here: calling
+- The per-CIK submissions cache must be doing its work here: calling
   this endpoint twice in a row with the same tickers should produce no second
   round of network requests. Verify this.
 
 ## Wiring
-Mount the router in src/index.ts. Keep /health and the M3 route working.
+Mount the router in src/index.ts. Keep all routes working.
 
 ## Tests (Vitest + supertest)
 Location: backend/src/routes/__tests__/summary.test.ts
@@ -603,7 +596,7 @@ is the failure mode to avoid here.
 - partial: table plus the per-ticker error notices — this is the interesting one
 - empty ticker set: prompt to add a company, not an error
 
-Reuse whatever loading/error presentation you built in M5 rather than
+Reuse whatever loading/error presentation you built in previous steps rather than
 inventing a second style.
 
 ## Tests (Vitest + @testing-library/react)
@@ -617,7 +610,7 @@ Mock the api module.
 - adding a duplicate ticker is rejected without a request
 
 ## Acceptance criteria
-1. npm test passes in frontend/, all M5 tests unchanged and still green
+1. npm test passes in frontend/, all tests unchanged and still green
 2. With docker compose up, in the browser:
    - the summary loads AAPL, SPOT, JPM by default
    - Spotify's latest-10-K cell explains itself rather than showing null
