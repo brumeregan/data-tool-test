@@ -426,3 +426,104 @@ deterministic.
 4. No any types.
 
 Then stop. Don't start the frontend.
+
+## Prompt 6 — Filings list UI
+
+Build the filings list UI ONLY.  Do not modify anything in backend/.
+
+## Stack constraints
+- React + TypeScript, strict. No any.
+- No component library, no Tailwind, no CSS framework. Plain CSS modules or a
+  single stylesheet. Keep it clean and readable.
+- No state management library. useState/useEffect is enough at this size.
+- All requests go through the existing src/api.ts helper, which fetches
+  relative to /api and is proxied to the backend by Vite. Never hardcode
+  http://localhost:3000 — that breaks the containerized setup.
+
+## Types
+Create frontend/src/types.ts mirroring the backend response contract exactly:
+Filing, Company, and the filings list envelope
+{ company, items, total, page, limit, totalPages, availableForms }.
+Hand-write these to match the backend; don't import across the repo boundary.
+
+## Structure
+src/
+ api.ts                     # extend: add getFilings(params)
+types.ts
+hooks/useFilings.ts          # fetch + loading/error/data state
+components/
+  -FilingsPage.tsx        # owns query state, composes the rest
+  -CompanySelector.tsx
+   - FilingsControls.tsx    # form filter + sort toggle
+   - FilingsTable.tsx
+   - Pagination.tsx
+
+Keep components presentational where possible - FilingsPage owns the state and
+passes values plus callbacks down.
+
+## Behaviour
+
+CompanySelector:
+- A text input for a ticker plus a submit button (Enter also submits).
+- Three quick-pick buttons: AAPL, SPOT, JPM.
+- Uppercase and trim before sending.
+
+FilingsControls:
+- Form-type dropdown populated from availableForms in the last response, with
+  an "All forms" option. Do not hardcode the list of form types.
+- Sort toggle for filing date, asc/desc, defaulting to desc.
+
+FilingsTable:
+- Columns: form, filing date, report date, accession number, and a link.
+- reportDate is nullable — render "—" rather than "null" or an empty cell.
+- The link opens documentUrl in a new tab (target="_blank",
+  rel="noopener noreferrer").
+
+Pagination:
+- Previous / Next plus "Page X of Y" and the total count.
+- Disable Previous on page 1 and Next on the last page.
+
+## State rules — these are where this kind of UI usually goes wrong
+- Changing company, form filter, or sort MUST reset page to 1. Otherwise you
+  land on page 7 of a 2-page result and see an empty table.
+- Changing company must clear the form filter, since availableForms differs
+  per company and a stale filter can produce a confusing empty list.
+- Handle out-of-order responses: if the user switches company quickly, a slow
+  earlier request must not overwrite a newer one. Use an AbortController or an
+  incrementing request id in useFilings.
+- Debounce nothing; requests fire on explicit submit or control change, not
+  on every keystroke.
+
+## Required states - render all four properly
+- loading: a simple indicator; keep the controls visible and disabled rather
+  than unmounting them, so the layout doesn't jump
+- error: show the backend's error message. A 404 for an unknown ticker should
+  read as "No company found for ticker XYZ", not as a raw error dump.
+- empty: items: [] with a valid company is NOT an error. Show "No filings
+  match this filter" and keep the controls usable.
+- success: the table
+
+## Tests (Vitest + @testing-library/react)
+Location: frontend/src/components/__tests__/
+Mock the api module — no real network calls.
+- table renders the rows returned by a mocked response
+- null reportDate renders as "—"
+- changing the form filter resets page to 1
+- changing company clears the form filter
+- a 404 from the API renders the friendly not-found message, not a crash
+- empty items renders the empty state, not the error state
+
+## Acceptance criteria
+1. test passes in frontend/
+2. Running docker compose up, in the browser:
+   - AAPL loads and shows filings
+   - filtering to 10-K narrows the list and the total updates
+   - flipping the sort reverses the order
+   - Next/Previous page through JPM's history correctly
+   - switching to SPOT works and the form dropdown now shows 20-F and 6-K
+   - typing NOTAREALTICKER shows the friendly not-found message
+   - clicking a filing link opens the real document on sec.gov
+   Confirm each of these yourself before telling me you're done.
+3. No any types. No hardcoded backend URL.
+
+Then stop. Don't build the summary view.
