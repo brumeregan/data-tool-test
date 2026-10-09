@@ -1,4 +1,4 @@
-import { getSubmissions, resolveTicker } from "../clients/edgar";
+import { getFullSubmissions, resolveTicker } from "../clients/edgar";
 import { filterByForm, normalizeFilings, paginate, sortByFilingDate } from "./normalize";
 import type { Filing, Page, SortDirection } from "./types";
 
@@ -23,7 +23,8 @@ export const getFilings = async ({
   sort,
 }: GetFilingsParams): Promise<FilingsResult> => {
   const { cik } = await resolveTicker(ticker);
-  const submissions = await getSubmissions(cik);
+  // Full history (recent + archive files) so total, availableForms and filters cover every filing.
+  const submissions = await getFullSubmissions(cik);
   const all = normalizeFilings(submissions);
 
   // Computed before filtering so the dropdown always lists every form the company has filed.
