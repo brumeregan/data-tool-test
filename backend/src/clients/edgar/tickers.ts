@@ -9,7 +9,8 @@ type TickerMap = Map<string, ResolvedTicker>;
 
 let loading: Promise<TickerMap> | null = null;
 
-export const padCik = (cik: number | string): string => String(cik).padStart(10, "0");
+export const cikForSubmissionsUrl = (cik: number | string): string =>
+  String(cik).padStart(10, "0");
 
 const loadTickers = async (): Promise<TickerMap> => {
   const parsed = companyTickersSchema.safeParse(await getJson(TICKERS_URL));
@@ -21,7 +22,11 @@ const loadTickers = async (): Promise<TickerMap> => {
   const map: TickerMap = new Map();
   for (const entry of Object.values(parsed.data)) {
     const key = entry.ticker.toUpperCase();
-    if (!map.has(key)) map.set(key, { cik: padCik(entry.cik_str), title: entry.title });
+    if (!map.has(key))
+      map.set(key, {
+        cik: cikForSubmissionsUrl(entry.cik_str),
+        title: entry.title,
+      });
   }
   return map;
 };

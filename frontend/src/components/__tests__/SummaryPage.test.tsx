@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError, getSummary } from '../../api';
 import { App } from '../../App';
-import { SummaryPage } from '../SummaryPage';
+import { SummaryPage } from "../../page/SummaryPage";
 import { makeSummary } from './fixtures';
 
 vi.mock('../../api', async (importOriginal) => ({

@@ -13,7 +13,7 @@ export type CompanySummary = {
   totalLast12Months: number;
   latest10K: { filingDate: string; documentUrl: string } | null;
   // Foreign private issuers (e.g. Spotify) file 20-F / 40-F instead of a 10-K. A structured field
-  // (rather than a free-text note) lets clients render or filter on it without parsing prose.
+  // lets clients render or filter on it
   latestAnnualReport: { form: string; filingDate: string; documentUrl: string } | null;
 };
 
@@ -21,7 +21,7 @@ export type SummaryResult = { companies: CompanySummary[]; errors: TickerError[]
 
 const FOREIGN_ANNUAL_FORMS: readonly string[] = ["20-F", "40-F"];
 
-const pad = (value: number): string => String(value).padStart(2, "0");
+const convertToHumanFormat = (value: number): string => String(value).padStart(2, "0");
 
 // ISO date (UTC) exactly 12 calendar months before `now`; Feb 29 clamps to Feb 28.
 export const twelveMonthsAgo = (now: Date): string => {
@@ -29,7 +29,7 @@ export const twelveMonthsAgo = (now: Date): string => {
   const month = now.getUTCMonth();
   const daysInMonth = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
   const day = Math.min(now.getUTCDate(), daysInMonth);
-  return `${year}-${pad(month + 1)}-${pad(day)}`;
+  return `${year}-${convertToHumanFormat(month + 1)}-${convertToHumanFormat(day)}`;
 };
 
 // Most recent by filingDate; ties keep the first one encountered (EDGAR order).

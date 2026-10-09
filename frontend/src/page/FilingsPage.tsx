@@ -1,10 +1,10 @@
 import { useState } from 'react';
 import { useFilings } from '../hooks/useFilings';
 import type { SortDirection } from '../types';
-import { CompanySelector } from './CompanySelector';
-import { FilingsControls } from './FilingsControls';
-import { FilingsTable } from './FilingsTable';
-import { Pagination } from './Pagination';
+import { CompanySelector } from '../components/CompanySelector';
+import { FilingsControls } from '../components/FilingsControls';
+import { FilingsTable } from '../components/FilingsTable';
+import { Pagination } from '../components/Pagination';
 
 const PAGE_SIZE = 25;
 

@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError, getFilings } from '../../api';
 import type { FilingsResponse } from '../../types';
-import { FilingsPage } from '../FilingsPage';
+import { FilingsPage } from "../../page/FilingsPage";
 import { makeResponse } from './fixtures';
 
 vi.mock('../../api', async (importOriginal) => ({

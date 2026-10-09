@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { FilingsPage } from './components/FilingsPage';
-import { SummaryPage } from './components/SummaryPage';
+import { FilingsPage } from "./page/FilingsPage";
+import { SummaryPage } from "./page/SummaryPage";
 
 type View = 'filings' | 'summary';
 

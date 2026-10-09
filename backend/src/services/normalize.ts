@@ -78,7 +78,6 @@ export const filterByForm = ({
   );
 };
 
-// Array.prototype.sort is stable, so equal dates keep their original relative order.
 export const sortByFilingDate = (
   filings: readonly Filing[],
   direction: SortDirection,

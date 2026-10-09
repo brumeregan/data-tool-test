@@ -1,10 +1,10 @@
 import { EdgarUnavailable } from "../../errors";
 import { getJson } from "./http";
 import { recentFilingsSchema, submissionsSchema } from "./schemas";
-import { padCik } from "./tickers";
+import { cikForSubmissionsUrl } from "./tickers";
 import type { FilingsFile, RecentFilings, Submissions } from "./types";
 
-const CACHE_TTL_MS = 15 * 60 * 1000;
+const CACHE_TTL_MS = 15 * 60 * 1000; // 15min
 
 // Caches promises, so concurrent requests for one CIK share a single download; failures are evicted.
 const cache = new Map<string, { expiresAt: number; value: Promise<Submissions> }>();
@@ -21,7 +21,7 @@ const loadSubmissions = async (paddedCik: string): Promise<Submissions> => {
 };
 
 export const getSubmissions = (cik: string): Promise<Submissions> => {
-  const paddedCik = padCik(cik);
+  const paddedCik = cikForSubmissionsUrl(cik);
   const cached = cache.get(paddedCik);
   if (cached && cached.expiresAt > Date.now()) return cached.value;
 
@@ -36,7 +36,6 @@ export const getSubmissions = (cik: string): Promise<Submissions> => {
 // is the same set of parallel arrays, directly at the top level (no "filings" wrapper).
 const ARCHIVE_BASE = "https://data.sec.gov/submissions";
 
-// Caches the promise so concurrent requests share one download; failures are evicted.
 const archiveCache = new Map<string, { expiresAt: number; value: Promise<RecentFilings> }>();
 
 const loadArchive = (name: string): Promise<RecentFilings> => {
@@ -71,9 +70,7 @@ export const getArchiveChunk = async ({ submissions, file }: ArchiveChunkParams)
 
 const COLUMNS = ["accessionNumber", "filingDate", "reportDate", "form", "primaryDocument"] as const;
 
-// The complete history: filings.recent followed by every archive file, newest first. Only the five
-// columns the normalizer uses are merged; other parallel arrays are dropped rather than risk
-// concatenating them out of alignment. Any failing archive fails the whole call, so history is
+// The complete history: we only process needed columns. Any failing archive fails the whole call, so history is
 // never silently truncated.
 export const getFullSubmissions = async (cik: string): Promise<Submissions> => {
   const submissions = await getSubmissions(cik);

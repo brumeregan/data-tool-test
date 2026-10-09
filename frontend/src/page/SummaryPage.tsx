@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { useSummary } from '../hooks/useSummary';
 import type { TickerError } from '../types';
-import { SummaryTable } from './SummaryTable';
-import { TickerInput } from './TickerInput';
+import { SummaryTable } from '../components/SummaryTable';
+import { TickerInput } from '../components/TickerInput';
 
 const DEFAULT_TICKERS = ['AAPL', 'SPOT', 'JPM'];
 

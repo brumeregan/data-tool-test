@@ -10,7 +10,7 @@ const sleep = (ms: number): Promise<void> =>
 let chain: Promise<void> = Promise.resolve();
 let lastRequestAt = 0;
 
-// Serialises outbound requests and keeps at least MIN_GAP_MS between them.
+// Throttle requests to EDGAR to avoid being blocked, usefull for large requests or several requests in a row (summary page)
 const throttle = (): Promise<void> => {
   const next = chain.then(async () => {
     const wait = lastRequestAt + MIN_GAP_MS - Date.now();
