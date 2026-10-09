@@ -131,3 +131,98 @@ than inventing a shape.
 4. Nothing outside clients/edgar imports from its internal files.
 
 Then stop and wait for instructions
+
+## Prompt 3 — Filing normalizer
+
+As a next task implement the filling nomalizer - the main transformation for this project.
+
+## Context
+EDGAR returns filings in a COLUMNAR format: filings.recent is an object of
+parallel arrays (form, filingDate, reportDate, accessionNumber,
+primaryDocument, ...), all index-aligned, rather than an array of objects.
+The job here is to zip index i across every array into one object per filing.
+
+## Where it goes
+backend/src/services/normalize.ts . It takes an already-validated submissions object as input and
+returns our own domain type. It must be a PURE function.
+
+Define the Filing domain type in backend/src/services/types.ts.
+
+## The Filing shape
+Each normalized filing should carry at least:
+- accessionNumber   (as-is, with dashes)
+- form              e.g. "10-K", "10-Q", "8-K", "20-F", "10-K/A"
+- filingDate        ISO date string
+- reportDate        ISO date string or null — this field IS sometimes empty
+                    in real EDGAR data, so model it as nullable
+- primaryDocument   filename, may be an empty string
+- documentUrl       constructed, see below
+- filingIndexUrl    constructed, see below
+
+## URL construction — get this exactly right
+Two different shapes of the accession number are needed:
+- documentUrl:
+  https://www.sec.gov/Archives/edgar/data/{cikNoLeadingZeros}/{accessionNoDashes}/{primaryDocument}
+- filingIndexUrl:
+  https://www.sec.gov/Archives/edgar/data/{cikNoLeadingZeros}/{accessionNoDashes}/{accessionWithDashes}-index.htm
+
+Note the CIK has leading zeros STRIPPED in the archive path, while the
+submissions API URL needs it zero-padded to 10 digits. Don't mix them up.
+
+If primaryDocument is an empty string, documentUrl must fall back to
+filingIndexUrl rather than producing a URL with a trailing slash and no file.
+
+## Correctness requirements
+- Assert all parallel arrays have the same length before zipping. If they
+  don't, throw a clear error naming the mismatch - silent misalignment would
+  attribute the wrong date to the wrong filing, which is the worst possible
+  failure mode here.
+- Empty reportDate ("") must become null, not "".
+- Preserve EDGAR's original ordering; do not sort here. Sorting is a route
+  concern.
+- Trim whitespace on string fields.
+
+## Also implement, as separate pure functions in the same module
+- filterByForm(filings, form): exact match on the form string. Add a documented
+  option for whether "10-K" should also match its amendment "10-K/A" — default
+  to NOT matching, and put a one-line comment explaining the choice, since this
+  is a judgment call I'll be asked about.
+- sortByFilingDate(filings, direction): stable sort, "asc" | "desc".
+- paginate(filings, page, limit): returns { items, total, page, limit,
+  totalPages }.
+
+Keep each one small and independently testable.
+
+## Tests (Vitest) — this is the most important test file in the project
+Location: backend/src/domain/__tests__/normalize.test.ts
+
+Save a REAL trimmed fixture: fetch Apple's submissions document, cut
+filings.recent down to about 10 filings (keeping all the parallel arrays
+consistently trimmed), and save it under __tests__/fixtures/apple-submissions.json.
+Include at least one 10-K, a few 8-Ks, and one entry with an empty reportDate.
+Use real data, not invented data.
+
+Cover:
+- correct number of filings out
+- field alignment: filing at index 2 has the form, date AND accession number
+  that all belong to index 2 in the source arrays
+- documentUrl is constructed exactly right for a known real filing (assert the
+  full literal string)
+- filingIndexUrl is constructed exactly right
+- CIK leading zeros are stripped in the archive path
+- empty reportDate becomes null
+- empty primaryDocument falls back to the index URL
+- mismatched array lengths throw
+- filterByForm returns only exact matches, and excludes "10-K/A" when filtering
+  for "10-K" by default
+- sortByFilingDate works both directions and is stable
+- paginate returns correct totals and handles a page past the end (empty items,
+  correct total)
+
+## Acceptance criteria
+1. npm test passes
+2. normalize.ts imports nothing that performs I/O
+3. No any types
+4. Every function in the module is exported and directly tested
+
+Then stop. Don't wire it into a route yet.
